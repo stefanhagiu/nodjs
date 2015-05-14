@@ -1,0 +1,233 @@
+<html>
+<head>
+<script src="http://localhost:3000/socket.io/socket.io.js"></script>
+<script src="keymaster.js" type="text/javascript" charset="utf-8"></script>
+<script type="text/javascript" charset="utf-8">
+	
+	var isNickNameSet = false;
+	var errorMessage = 'you need a nickname to be able to chat!';
+	var socket = io.connect('http://localhost:3000');
+	var previousTime = 0,
+		INTERVAL = 30,
+		W = 800,
+		H = 600,
+		avatar,
+		LEFT = 37, UP = 38, RIGHT = 39, DOWN = 40,
+		avatar_list = [],
+		canvas,
+		id = -1,
+		chat_message;
+	window.onload = function(){
+		//console.log("onload!");
+		canvas = document.getElementById("canvas"),
+			c = canvas.getContext("2d");
+		
+		setInterval(
+			function() {
+				var currentTime = new Date().getTime(),
+					timeElapsed;
+
+				if(previousTime == 0) {
+					previousTime = currentTime;
+				}
+
+				timeElapsed = currentTime - previousTime;
+
+				update(timeElapsed, currentTime);
+				draw(canvas, timeElapsed, currentTime);
+
+				previousTime = currentTime;
+			}
+		, INTERVAL);
+	}
+	
+	function update(timeElapsed, currentTime){
+		//console.log("update!");
+
+		for(var i = 0; i < avatar_list.length; i = i + 1) {
+			if(avatar_list[i].id == avatar.id){
+
+				if(key.isPressed(RIGHT)){
+					avatar_list[i].x += avatar_list[i].vx;
+					socket.emit('update_avatar_list',{message: avatar_list[i]});
+				}
+				if(key.isPressed(LEFT)) {
+					avatar_list[i].x -= avatar_list[i].vx;
+					socket.emit('update_avatar_list',{message: avatar_list[i]});
+				}
+				if(key.isPressed(UP)){
+					avatar_list[i].y -= avatar_list[i].vy;
+					socket.emit('update_avatar_list',{message: avatar_list[i]});
+				}
+				if(key.isPressed(DOWN)){
+					avatar_list[i].y += avatar_list[i].vy;
+					socket.emit('update_avatar_list',{message: avatar_list[i]});
+				}
+				// presupunem ca a facut un update la lista !
+
+				
+			}
+		}
+	}
+
+	function draw(canvas, timeElapsed, currentTime){
+		//console.log("draw!");
+		var c = canvas.getContext("2d");
+		clearCanvas(c);
+		for(var i = 0; i < avatar_list.length; i = i + 1) {
+			avatar_list[i].draw(c);
+			avatar_list[i].drawmessage(c,avatar_list[i].current_message);
+			
+		}
+	}
+
+	function clearCanvas(canvas){
+		canvas.beginPath();
+		canvas.rect(0,0,W,H);
+		canvas.fillStyle = "#CCCC99";
+		canvas.fill();
+	}
+
+	function Avatar() {
+		this.x = 0;
+		this.y = 0;
+
+		this.vx = 10;
+		this.vy = 10;
+		
+		this.size = 50;
+		this.color = "#9900FF";
+
+		this.current_message = '';
+
+		this.id = -1;
+		this.draw = function(context) {
+			context.beginPath();
+			context.rect(this.x, this.y, this.size, this.size);
+			context.fillStyle = this.color;
+			context.fill();
+		}
+		this.drawmessage = function(context, message) {
+			context.fillStyle = "#FFFFFF";
+			context.font="20px Arial";
+			var text = context.measureText(message);
+			console.log("message.length: "+text.width);
+			context.fillText(message,this.x - (text.width/6),this.y-10);
+		}
+	}
+
+	logChat = function (message) {
+		var writeTo = document.getElementById('_chat');
+		var newLi = document.createElement('li');
+		var text = document.createTextNode('' + message);
+		newLi.appendChild(text);
+		writeTo.appendChild(newLi);
+	}
+
+	function lookAtKey(event){
+
+		if(isNickNameSet){
+			if(event.keyCode == 13) {
+				var fullMessage = document.getElementById('chat_box');
+				avatar.current_message = fullMessage.value;
+
+				socket.emit('chat',{message: avatar});
+				fullMessage.value = '';
+				
+			}
+		}
+		else
+			if(event.keyCode == 13)
+				logChat(errorMessage);
+	}
+
+	function setNickName(event){
+
+		console.log('your in setNickName function!');
+		
+		if(event.keyCode == 13){
+			var nickname = document.getElementById('chat_name').value;
+			socket.emit('nickname',{message: nickname});
+			document.getElementById("setNickNameId").style.display = "none";
+			document.getElementById("_NickName").innerHTML = nickname + " :";
+			isNickNameSet = true;
+
+			var color = document.getElementById('avatar_color').value;
+
+			avatar = new Avatar();
+			avatar.x = (W - avatar.size) / 2;
+			avatar.y = (H - avatar.size) / 2;
+			avatar.id = id;
+			avatar.color = color;
+
+			socket.emit('new_avatar',{message: avatar});
+		}
+
+	}
+	function update_list(data){
+		avatar_list = [];
+		for(var i = 0; i < data.message.length; i++) {
+			console.log(data.message[i]);
+
+			var _avatar = new Avatar();
+			_avatar.x = data.message[i].x;
+			_avatar.y = data.message[i].y;
+			_avatar.vx = data.message[i].vx;
+			_avatar.vy = data.message[i].vy;
+			_avatar.size = data.message[i].size;
+			_avatar.color = data.message[i].color;
+			_avatar.current_message = data.message[i].current_message;
+			_avatar.id = data.message[i].id;
+
+			console.log(_avatar);
+
+			avatar_list.push(_avatar);
+		}
+	}
+	socket.on('update_avatar_list_', function (data){
+		console.log("update_avatar_list_");
+		update_list(data)
+	});
+
+	socket.on('add_new_avatar', function (data){
+		console.log("add_new_avatar");
+		//console.log(data.message);
+		update_list(data)
+	});
+
+	socket.on('entrance', function  (data) {
+		logChat(data.message);
+		console.log(data.id);
+		id = data.id;
+	});
+	socket.on('exit',function (data){
+		logChat(data.message);
+		console.log("remove id: "+id);
+
+	});
+	/* no need any more. display massage on canvas New!*/
+	// socket.on('chat', function  (data) {
+	// 	logChat(data.message);
+
+	// });
+
+
+</script>
+</head>
+<body>
+	<canvas id="canvas" width="800" height="600"></canvas>
+	<div id= "chatRoom">
+		<ul id= "_chat">
+
+		</ul>
+	</div>
+
+	<div id = "setNickNameId">
+		<p>your nickname :</p>
+		<input type="text" name="chat_name" value="" id="chat_name" placeholder="your nickname" onkeypress="return setNickName(event)" />
+	</div>
+	<p id = "_NickName"><p>
+	<input type="text" name="chat_box" value="" id="chat_box" placeholder="type to chat..." onkeypress="return lookAtKey(event)" />
+	<input id="avatar_color" type="color" />
+</body>
+</html>
